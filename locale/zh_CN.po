@@ -10,17 +10,17 @@ msgstr ""
 msgid "SingleCode Editor"
 msgstr "SingleCode 编辑器"
 
-msgid "Open...\tCtrl+O"
-msgstr "读取...\tCtrl+O"
+msgid "Open..."
+msgstr "读取..."
 
-msgid "Save\tCtrl+S"
-msgstr "保存\tCtrl+S"
+msgid "Save"
+msgstr "保存"
 
-msgid "Save As...\tCtrl+Shift+S"
-msgstr "另存为...\tCtrl+Shift+S"
+msgid "Save As..."
+msgstr "另存为..."
 
-msgid "Exit\tAlt+F4"
-msgstr "退出\tAlt+F4"
+msgid "Exit"
+msgstr "退出"
 
 msgid "File"
 msgstr "文件"
@@ -31,6 +31,7 @@ msgstr "就绪"
 msgid "Untitled"
 msgstr "未命名"
 
+#, c-format
 msgid "%s%s - SingleCode Editor"
 msgstr "%s%s - SingleCode 编辑器"
 
@@ -52,6 +53,7 @@ msgstr "无法读取所选文件。"
 msgid "Open Failed"
 msgstr "读取失败"
 
+#, c-format
 msgid "Loaded %s"
 msgstr "已读取 %s"
 
@@ -67,5 +69,6 @@ msgstr "无法保存到所选位置。"
 msgid "Save Failed"
 msgstr "保存失败"
 
+#, c-format
 msgid "Saved %s"
 msgstr "已保存 %s"

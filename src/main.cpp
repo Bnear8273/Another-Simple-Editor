@@ -16,11 +16,11 @@ public:
         : wxFrame(nullptr, wxID_ANY, _("SingleCode Editor"), wxDefaultPosition,
                   wxSize(960, 680)) {
         auto* fileMenu = new wxMenu;
-        fileMenu->Append(ID_OPEN, _("Open...\tCtrl+O"));
-        fileMenu->Append(ID_SAVE, _("Save\tCtrl+S"));
-        fileMenu->Append(ID_SAVE_AS, _("Save As...\tCtrl+Shift+S"));
+        fileMenu->Append(ID_OPEN, _("Open...") + wxS("\tCtrl+O"));
+        fileMenu->Append(ID_SAVE, _("Save") + wxS("\tCtrl+S"));
+        fileMenu->Append(ID_SAVE_AS, _("Save As...") + wxS("\tCtrl+Shift+S"));
         fileMenu->AppendSeparator();
-        fileMenu->Append(wxID_EXIT, _("Exit\tAlt+F4"));
+        fileMenu->Append(wxID_EXIT, _("Exit") + wxS("\tAlt+F4"));
 
         auto* menuBar = new wxMenuBar;
         menuBar->Append(fileMenu, _("File"));
