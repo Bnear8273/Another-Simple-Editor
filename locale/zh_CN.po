@@ -1,0 +1,71 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: SingleCode Editor 0.1\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: zh_CN\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgid "SingleCode Editor"
+msgstr "SingleCode 编辑器"
+
+msgid "Open...\tCtrl+O"
+msgstr "读取...\tCtrl+O"
+
+msgid "Save\tCtrl+S"
+msgstr "保存\tCtrl+S"
+
+msgid "Save As...\tCtrl+Shift+S"
+msgstr "另存为...\tCtrl+Shift+S"
+
+msgid "Exit\tAlt+F4"
+msgstr "退出\tAlt+F4"
+
+msgid "File"
+msgstr "文件"
+
+msgid "Ready"
+msgstr "就绪"
+
+msgid "Untitled"
+msgstr "未命名"
+
+msgid "%s%s - SingleCode Editor"
+msgstr "%s%s - SingleCode 编辑器"
+
+msgid "This document has unsaved changes. Save them first?"
+msgstr "当前文档有未保存的更改。要先保存吗？"
+
+msgid "Unsaved Changes"
+msgstr "未保存的更改"
+
+msgid "Open Text File"
+msgstr "读取文本文件"
+
+msgid "All files (*.*)|*.*"
+msgstr "所有文件 (*.*)|*.*"
+
+msgid "Could not read the selected file."
+msgstr "无法读取所选文件。"
+
+msgid "Open Failed"
+msgstr "读取失败"
+
+msgid "Loaded %s"
+msgstr "已读取 %s"
+
+msgid "Save As"
+msgstr "另存为"
+
+msgid "Text files (*.txt)|*.txt|All files (*.*)|*.*"
+msgstr "文本文件 (*.txt)|*.txt|所有文件 (*.*)|*.*"
+
+msgid "Could not save to the selected location."
+msgstr "无法保存到所选位置。"
+
+msgid "Save Failed"
+msgstr "保存失败"
+
+msgid "Saved %s"
+msgstr "已保存 %s"
