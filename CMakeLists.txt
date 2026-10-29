@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 project(SingleCodeEditor LANGUAGES CXX)
 
 include(GNUInstallDirs)
+include(CTest)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,6 +12,19 @@ include(${wxWidgets_USE_FILE})
 
 add_executable(singlecode-editor src/main.cpp)
 target_link_libraries(singlecode-editor PRIVATE ${wxWidgets_LIBRARIES})
+
+if(UNIX AND NOT APPLE AND "${wxWidgets_DEFINITIONS}" MATCHES "__WXGTK__")
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(GTK_FONT_RENDERING REQUIRED IMPORTED_TARGET
+                      fontconfig gtk+-3.0 pangocairo pangoft2>=1.48)
+    target_link_libraries(singlecode-editor PRIVATE PkgConfig::GTK_FONT_RENDERING)
+    if(BUILD_TESTING)
+        add_executable(pixel-font-rendering-test tests/pixel_font_rendering_test.cpp)
+        target_link_libraries(pixel-font-rendering-test PRIVATE ${wxWidgets_LIBRARIES} PkgConfig::GTK_FONT_RENDERING)
+        add_test(NAME pixel-font-rendering COMMAND pixel-font-rendering-test)
+        set_tests_properties(pixel-font-rendering PROPERTIES SKIP_RETURN_CODE 77)
+    endif()
+endif()
 
 # Translation catalogs are optional at build time. The application falls back
 # to its source strings when no catalog exists for the active system locale.

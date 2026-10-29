@@ -6,9 +6,15 @@
 #include <wx/stc/stc.h>
 #include <wx/settings.h>
 #include <wx/config.h>
+#include <wx/checkbox.h>
 #include <wx/fontenum.h>
 #include <wx/fontpicker.h>
 #include <wx/spinctrl.h>
+#ifdef __WXGTK__
+#include <gtk/gtk.h>
+#include <pango/pangocairo.h>
+#include "pixel_font_rendering.h"
+#endif
 
 namespace {
 constexpr int ID_OPEN = wxID_HIGHEST + 1;
@@ -91,6 +97,8 @@ public:
             CallAfter(&EditorFrame::UpdateLineNumberWidth);
             event.Skip();
         }, editor_->GetId());
+        editor_->Bind(wxEVT_KEY_DOWN, &EditorFrame::OnEditorKeyDown, this);
+        editor_->Bind(wxEVT_MOUSEWHEEL, &EditorFrame::OnEditorMouseWheel, this);
         Bind(wxEVT_SYS_COLOUR_CHANGED, [this](wxSysColourChangedEvent& event) {
             ApplySystemAppearance();
             event.Skip();
@@ -104,9 +112,11 @@ private:
     wxStyledTextCtrl* editor_ = nullptr;
     wxFont editorFont_;
     int extraLineSpacing_ = 0;
+    bool pixelFontRendering_ = false;
     wxString filePath_;
     bool loading_ = false;
     bool previousEditWasWhitespace_ = false;
+    int wheelZoomRemainder_ = 0;
     wxFindReplaceData findData_;
     wxFindReplaceDialog* findDialog_ = nullptr;
 
@@ -122,6 +132,11 @@ private:
             static_cast<unsigned char>(background.Blue() * (1.0 - gutterTint) +
                                        foreground.Blue() * gutterTint));
         editor_->StyleSetFont(wxSTC_STYLE_DEFAULT, editorFont_);
+#if defined(__WXMSW__)
+        editor_->SetFontQuality(pixelFontRendering_
+            ? wxSTC_EFF_QUALITY_NON_ANTIALIASED
+            : wxSTC_EFF_QUALITY_DEFAULT);
+#endif
         editor_->StyleSetBackground(wxSTC_STYLE_DEFAULT, background);
         editor_->StyleSetForeground(wxSTC_STYLE_DEFAULT, foreground);
         editor_->StyleClearAll();
@@ -141,6 +156,9 @@ private:
         UpdateLineNumberWidth();
         editor_->SetMarginLeft(FromDIP(4));
         editor_->SetExtraDescent(FromDIP(extraLineSpacing_));
+#if defined(__WXGTK__)
+        ApplyPixelFontRendering();
+#endif
         editor_->Refresh();
     }
 
@@ -150,10 +168,13 @@ private:
         wxString fontInfo;
         long pointSize = editorFont_.IsOk() ? editorFont_.GetPointSize() : 10;
         long lineSpacing = 0;
+        bool pixelFontRendering = false;
         config.Read(wxS("/Editor/Font"), &fontInfo);
         config.Read(wxS("/Editor/FontFace"), &faceName);
         config.Read(wxS("/Editor/FontSize"), &pointSize, pointSize);
         config.Read(wxS("/Editor/LineSpacing"), &lineSpacing, 0L);
+        config.Read(wxS("/Editor/PixelFontRendering"), &pixelFontRendering,
+                    false);
 
         if (!fontInfo.empty()) {
             wxFont configuredFont;
@@ -168,16 +189,71 @@ private:
             editorFont_.SetFaceName(faceName);
         }
         extraLineSpacing_ = static_cast<int>(wxClip(lineSpacing, 0L, 30L));
+        pixelFontRendering_ = pixelFontRendering;
     }
 
     void SaveEditorSettings() {
         wxConfig config(wxS("SingleCode"));
         config.Write(wxS("/Editor/Font"), editorFont_.GetNativeFontInfoDesc());
         config.Write(wxS("/Editor/FontFace"), editorFont_.GetFaceName());
-        config.Write(wxS("/Editor/FontSize"), editorFont_.GetPointSize());
+        config.Write(wxS("/Editor/FontSize"), EffectiveFontSize());
         config.Write(wxS("/Editor/LineSpacing"), extraLineSpacing_);
+        config.Write(wxS("/Editor/PixelFontRendering"), pixelFontRendering_);
         config.Flush();
     }
+
+    int EffectiveFontSize() const {
+        return static_cast<int>(wxClip(
+            editorFont_.GetPointSize() + editor_->GetZoom(), 6, 72));
+    }
+
+    void SetEffectiveFontSize(int pointSize) {
+        const int clampedSize = static_cast<int>(wxClip(pointSize, 6, 72));
+        editor_->SetZoom(clampedSize - editorFont_.GetPointSize());
+    }
+
+    void OnEditorKeyDown(wxKeyEvent& event) {
+        if (event.ControlDown() && !event.AltDown() && !event.MetaDown()) {
+            const int key = event.GetKeyCode();
+            if (key == WXK_ADD || key == WXK_NUMPAD_ADD || key == '+' ||
+                (key == '=' && event.ShiftDown())) {
+                SetEffectiveFontSize(EffectiveFontSize() + 1);
+                return;
+            }
+            if (key == WXK_SUBTRACT || key == WXK_NUMPAD_SUBTRACT ||
+                key == '-') {
+                SetEffectiveFontSize(EffectiveFontSize() - 1);
+                return;
+            }
+        }
+        event.Skip();
+    }
+
+    void OnEditorMouseWheel(wxMouseEvent& event) {
+        if (event.ControlDown() && !event.AltDown() && !event.MetaDown()) {
+            const int delta = event.GetWheelDelta();
+            if (delta > 0) {
+                wheelZoomRemainder_ += event.GetWheelRotation();
+                const int steps = wheelZoomRemainder_ / delta;
+                wheelZoomRemainder_ %= delta;
+                if (steps != 0) {
+                    SetEffectiveFontSize(EffectiveFontSize() + steps);
+                }
+            }
+            return;
+        }
+        event.Skip();
+    }
+
+#ifdef __WXGTK__
+    void ApplyPixelFontRendering() {
+        auto* context = gtk_widget_get_pango_context(
+            GTK_WIDGET(editor_->GetHandle()));
+        auto* fontMap = PANGO_FC_FONT_MAP(
+            pango_context_get_font_map(context));
+        SetPixelFontRendering(fontMap, editorFont_.GetFaceName(), pixelFontRendering_);
+    }
+#endif
 
     void OnSavePointChanged(wxStyledTextEvent&) {
         if (!loading_) {
@@ -326,11 +402,13 @@ private:
         auto* outer = new wxBoxSizer(wxVERTICAL);
         auto* grid = new wxFlexGridSizer(2, FromDIP(12), FromDIP(10));
         grid->AddGrowableCol(1, 1);
+        wxFont settingsFont = editorFont_;
+        settingsFont.SetPointSize(EffectiveFontSize());
 
         grid->Add(new wxStaticText(&dialog, wxID_ANY, _("Font")),
                   0, wxALIGN_CENTER_VERTICAL);
         auto* fontPicker = new wxFontPickerCtrl(
-            &dialog, wxID_ANY, editorFont_, wxDefaultPosition, wxDefaultSize,
+            &dialog, wxID_ANY, settingsFont, wxDefaultPosition, wxDefaultSize,
             wxFNTP_FONTDESC_AS_LABEL);
         fontPicker->SetMinPointSize(6);
         fontPicker->SetMaxPointSize(72);
@@ -344,8 +422,17 @@ private:
             wxSP_ARROW_KEYS, 0, 30, extraLineSpacing_);
         grid->Add(spacing, 0, wxEXPAND);
 
+        auto* pixelFontRendering = new wxCheckBox(
+            &dialog, wxID_ANY, _("Pixel font rendering (disable anti-aliasing)"));
+        pixelFontRendering->SetValue(pixelFontRendering_);
+#if !defined(__WXGTK__) && !defined(__WXMSW__)
+        pixelFontRendering->Disable();
+#endif
+        outer->Add(pixelFontRendering, 0,
+                   wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(16));
+
         auto* preview = new wxStaticText(&dialog, wxID_ANY, _("Aa Bb 0123"));
-        preview->SetFont(editorFont_);
+        preview->SetFont(settingsFont);
         fontPicker->Bind(wxEVT_FONTPICKER_CHANGED,
                          [preview](wxFontPickerEvent& event) {
                              preview->SetFont(event.GetFont());
@@ -368,7 +455,9 @@ private:
         if (selectedFont.IsOk()) {
             editorFont_ = selectedFont;
         }
+        editor_->SetZoom(0);
         extraLineSpacing_ = spacing->GetValue();
+        pixelFontRendering_ = pixelFontRendering->GetValue();
         ApplySystemAppearance();
         SaveEditorSettings();
         SetStatusText(_("Editor settings updated"), 0);
@@ -470,6 +559,7 @@ private:
 
     void OnClose(wxCloseEvent& event) {
         if (ConfirmSaveChanges()) {
+            SaveEditorSettings();
             event.Skip();
         } else {
             event.Veto();

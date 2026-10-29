@@ -46,6 +46,9 @@ msgstr "字体"
 msgid "Line spacing (extra pixels)"
 msgstr "行距（额外像素）"
 
+msgid "Pixel font rendering (disable anti-aliasing)"
+msgstr "点阵字体渲染（关闭抗锯齿）"
+
 msgid "Aa Bb 0123"
 msgstr "Aa Bb 0123"
 
