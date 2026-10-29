@@ -5,6 +5,10 @@
 #include <wx/fdrepdlg.h>
 #include <wx/stc/stc.h>
 #include <wx/settings.h>
+#include <wx/config.h>
+#include <wx/fontenum.h>
+#include <wx/fontpicker.h>
+#include <wx/spinctrl.h>
 
 namespace {
 constexpr int ID_OPEN = wxID_HIGHEST + 1;
@@ -15,6 +19,7 @@ constexpr int ID_REDO = wxID_HIGHEST + 5;
 constexpr int ID_FIND = wxID_HIGHEST + 6;
 constexpr int ID_FIND_NEXT = wxID_HIGHEST + 7;
 constexpr int ID_FIND_PREVIOUS = wxID_HIGHEST + 8;
+constexpr int ID_EDITOR_SETTINGS = wxID_HIGHEST + 9;
 }
 
 class EditorFrame final : public wxFrame {
@@ -40,9 +45,15 @@ public:
         editMenu->Append(ID_FIND_NEXT, _("Find Next") + wxS("\tF3"));
         editMenu->Append(ID_FIND_PREVIOUS, _("Find Previous") + wxS("\tShift+F3"));
         menuBar->Append(editMenu, _("Edit"));
+
+        auto* settingsMenu = new wxMenu;
+        settingsMenu->Append(ID_EDITOR_SETTINGS, _("Editor Settings..."));
+        menuBar->Append(settingsMenu, _("Settings"));
         SetMenuBar(menuBar);
 
         editor_ = new wxStyledTextCtrl(this, wxID_ANY);
+        editorFont_ = wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT);
+        LoadEditorSettings();
         ApplySystemAppearance();
 
         CreateStatusBar(2);
@@ -59,6 +70,7 @@ public:
         Bind(wxEVT_MENU, &EditorFrame::OnFind, this, ID_FIND);
         Bind(wxEVT_MENU, [this](wxCommandEvent&) { FindText(true); }, ID_FIND_NEXT);
         Bind(wxEVT_MENU, [this](wxCommandEvent&) { FindText(false); }, ID_FIND_PREVIOUS);
+        Bind(wxEVT_MENU, &EditorFrame::OnEditorSettings, this, ID_EDITOR_SETTINGS);
         Bind(wxEVT_FIND, &EditorFrame::OnFindDialogSearch, this);
         Bind(wxEVT_FIND_NEXT, &EditorFrame::OnFindDialogSearch, this);
         Bind(wxEVT_FIND_CLOSE, &EditorFrame::OnFindDialogClose, this);
@@ -90,6 +102,8 @@ public:
 
 private:
     wxStyledTextCtrl* editor_ = nullptr;
+    wxFont editorFont_;
+    int extraLineSpacing_ = 0;
     wxString filePath_;
     bool loading_ = false;
     bool previousEditWasWhitespace_ = false;
@@ -107,8 +121,7 @@ private:
                                        foreground.Green() * gutterTint),
             static_cast<unsigned char>(background.Blue() * (1.0 - gutterTint) +
                                        foreground.Blue() * gutterTint));
-        editor_->StyleSetFont(wxSTC_STYLE_DEFAULT,
-                             wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT));
+        editor_->StyleSetFont(wxSTC_STYLE_DEFAULT, editorFont_);
         editor_->StyleSetBackground(wxSTC_STYLE_DEFAULT, background);
         editor_->StyleSetForeground(wxSTC_STYLE_DEFAULT, foreground);
         editor_->StyleClearAll();
@@ -127,7 +140,43 @@ private:
         editor_->SetMarginBackground(0, gutter);
         UpdateLineNumberWidth();
         editor_->SetMarginLeft(FromDIP(4));
+        editor_->SetExtraDescent(FromDIP(extraLineSpacing_));
         editor_->Refresh();
+    }
+
+    void LoadEditorSettings() {
+        wxConfig config(wxS("SingleCode"));
+        wxString faceName;
+        wxString fontInfo;
+        long pointSize = editorFont_.IsOk() ? editorFont_.GetPointSize() : 10;
+        long lineSpacing = 0;
+        config.Read(wxS("/Editor/Font"), &fontInfo);
+        config.Read(wxS("/Editor/FontFace"), &faceName);
+        config.Read(wxS("/Editor/FontSize"), &pointSize, pointSize);
+        config.Read(wxS("/Editor/LineSpacing"), &lineSpacing, 0L);
+
+        if (!fontInfo.empty()) {
+            wxFont configuredFont;
+            if (configuredFont.SetNativeFontInfo(fontInfo)) {
+                editorFont_ = configuredFont;
+            }
+        }
+        if (pointSize >= 6 && pointSize <= 72) {
+            editorFont_.SetPointSize(static_cast<int>(pointSize));
+        }
+        if (!faceName.empty() && wxFontEnumerator::IsValidFacename(faceName)) {
+            editorFont_.SetFaceName(faceName);
+        }
+        extraLineSpacing_ = static_cast<int>(wxClip(lineSpacing, 0L, 30L));
+    }
+
+    void SaveEditorSettings() {
+        wxConfig config(wxS("SingleCode"));
+        config.Write(wxS("/Editor/Font"), editorFont_.GetNativeFontInfoDesc());
+        config.Write(wxS("/Editor/FontFace"), editorFont_.GetFaceName());
+        config.Write(wxS("/Editor/FontSize"), editorFont_.GetPointSize());
+        config.Write(wxS("/Editor/LineSpacing"), extraLineSpacing_);
+        config.Flush();
     }
 
     void OnSavePointChanged(wxStyledTextEvent&) {
@@ -269,6 +318,60 @@ private:
         }
         findDialog_->Show();
         findDialog_->Raise();
+    }
+
+    void OnEditorSettings(wxCommandEvent&) {
+        wxDialog dialog(this, wxID_ANY, _("Editor Settings"), wxDefaultPosition,
+                        wxDefaultSize, wxDEFAULT_DIALOG_STYLE);
+        auto* outer = new wxBoxSizer(wxVERTICAL);
+        auto* grid = new wxFlexGridSizer(2, FromDIP(12), FromDIP(10));
+        grid->AddGrowableCol(1, 1);
+
+        grid->Add(new wxStaticText(&dialog, wxID_ANY, _("Font")),
+                  0, wxALIGN_CENTER_VERTICAL);
+        auto* fontPicker = new wxFontPickerCtrl(
+            &dialog, wxID_ANY, editorFont_, wxDefaultPosition, wxDefaultSize,
+            wxFNTP_FONTDESC_AS_LABEL);
+        fontPicker->SetMinPointSize(6);
+        fontPicker->SetMaxPointSize(72);
+        grid->Add(fontPicker, 1, wxEXPAND);
+
+        grid->Add(new wxStaticText(&dialog, wxID_ANY,
+                                   _("Line spacing (extra pixels)")),
+                  0, wxALIGN_CENTER_VERTICAL);
+        auto* spacing = new wxSpinCtrl(
+            &dialog, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize,
+            wxSP_ARROW_KEYS, 0, 30, extraLineSpacing_);
+        grid->Add(spacing, 0, wxEXPAND);
+
+        auto* preview = new wxStaticText(&dialog, wxID_ANY, _("Aa Bb 0123"));
+        preview->SetFont(editorFont_);
+        fontPicker->Bind(wxEVT_FONTPICKER_CHANGED,
+                         [preview](wxFontPickerEvent& event) {
+                             preview->SetFont(event.GetFont());
+                             preview->Refresh();
+                         });
+
+        outer->Add(grid, 0, wxALL | wxEXPAND, FromDIP(16));
+        outer->Add(preview, 0, wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(16));
+        outer->Add(dialog.CreateStdDialogButtonSizer(wxOK | wxCANCEL),
+                   0, wxLEFT | wxRIGHT | wxBOTTOM | wxEXPAND, FromDIP(12));
+        dialog.SetSizerAndFit(outer);
+        dialog.SetMinSize(wxSize(FromDIP(390), -1));
+        dialog.CentreOnParent();
+
+        if (dialog.ShowModal() != wxID_OK) {
+            return;
+        }
+
+        const wxFont selectedFont = fontPicker->GetSelectedFont();
+        if (selectedFont.IsOk()) {
+            editorFont_ = selectedFont;
+        }
+        extraLineSpacing_ = spacing->GetValue();
+        ApplySystemAppearance();
+        SaveEditorSettings();
+        SetStatusText(_("Editor settings updated"), 0);
     }
 
     void OnFindDialogSearch(wxFindDialogEvent& event) {

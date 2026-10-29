@@ -31,6 +31,27 @@ msgstr "文件"
 msgid "Edit"
 msgstr "编辑"
 
+msgid "Settings"
+msgstr "设置"
+
+msgid "Editor Settings..."
+msgstr "编辑器设置..."
+
+msgid "Editor Settings"
+msgstr "编辑器设置"
+
+msgid "Font"
+msgstr "字体"
+
+msgid "Line spacing (extra pixels)"
+msgstr "行距（额外像素）"
+
+msgid "Aa Bb 0123"
+msgstr "Aa Bb 0123"
+
+msgid "Editor settings updated"
+msgstr "编辑器设置已更新"
+
 msgid "Undo"
 msgstr "撤回"
 
