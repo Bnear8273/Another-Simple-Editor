@@ -2,6 +2,7 @@
 #include <wx/filedlg.h>
 #include <wx/filename.h>
 #include <wx/stdpaths.h>
+#include <wx/fdrepdlg.h>
 #include <wx/stc/stc.h>
 #include <wx/settings.h>
 
@@ -11,6 +12,9 @@ constexpr int ID_SAVE = wxID_HIGHEST + 2;
 constexpr int ID_SAVE_AS = wxID_HIGHEST + 3;
 constexpr int ID_UNDO = wxID_HIGHEST + 4;
 constexpr int ID_REDO = wxID_HIGHEST + 5;
+constexpr int ID_FIND = wxID_HIGHEST + 6;
+constexpr int ID_FIND_NEXT = wxID_HIGHEST + 7;
+constexpr int ID_FIND_PREVIOUS = wxID_HIGHEST + 8;
 }
 
 class EditorFrame final : public wxFrame {
@@ -31,6 +35,10 @@ public:
         auto* editMenu = new wxMenu;
         editMenu->Append(ID_UNDO, _("Undo") + wxS("\tCtrl+Z"));
         editMenu->Append(ID_REDO, _("Redo") + wxS("\tCtrl+Y"));
+        editMenu->AppendSeparator();
+        editMenu->Append(ID_FIND, _("Find...") + wxS("\tCtrl+F"));
+        editMenu->Append(ID_FIND_NEXT, _("Find Next") + wxS("\tF3"));
+        editMenu->Append(ID_FIND_PREVIOUS, _("Find Previous") + wxS("\tShift+F3"));
         menuBar->Append(editMenu, _("Edit"));
         SetMenuBar(menuBar);
 
@@ -45,6 +53,12 @@ public:
         Bind(wxEVT_MENU, &EditorFrame::OnSaveAs, this, ID_SAVE_AS);
         Bind(wxEVT_MENU, &EditorFrame::OnUndo, this, ID_UNDO);
         Bind(wxEVT_MENU, &EditorFrame::OnRedo, this, ID_REDO);
+        Bind(wxEVT_MENU, &EditorFrame::OnFind, this, ID_FIND);
+        Bind(wxEVT_MENU, [this](wxCommandEvent&) { FindText(true); }, ID_FIND_NEXT);
+        Bind(wxEVT_MENU, [this](wxCommandEvent&) { FindText(false); }, ID_FIND_PREVIOUS);
+        Bind(wxEVT_FIND, &EditorFrame::OnFindDialogSearch, this);
+        Bind(wxEVT_FIND_NEXT, &EditorFrame::OnFindDialogSearch, this);
+        Bind(wxEVT_FIND_CLOSE, &EditorFrame::OnFindDialogClose, this);
         Bind(wxEVT_UPDATE_UI, &EditorFrame::OnUpdateUndo, this, ID_UNDO);
         Bind(wxEVT_UPDATE_UI, &EditorFrame::OnUpdateRedo, this, ID_REDO);
         Bind(wxEVT_MENU, [this](wxCommandEvent&) { Close(); }, wxID_EXIT);
@@ -68,6 +82,8 @@ private:
     wxString filePath_;
     bool loading_ = false;
     bool previousEditWasWhitespace_ = false;
+    wxFindReplaceData findData_;
+    wxFindReplaceDialog* findDialog_ = nullptr;
 
     void ApplySystemAppearance() {
         const wxColour background = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW);
@@ -198,6 +214,67 @@ private:
         event.Enable(editor_->CanRedo());
     }
 
+    void OnFind(wxCommandEvent&) {
+        if (findDialog_ == nullptr) {
+            findDialog_ = new wxFindReplaceDialog(
+                this, &findData_, _("Find"), wxFR_NOWHOLEWORD);
+        }
+        findDialog_->Show();
+        findDialog_->Raise();
+    }
+
+    void OnFindDialogSearch(wxFindDialogEvent& event) {
+        findData_.SetFindString(event.GetFindString());
+        FindText((event.GetFlags() & wxFR_DOWN) != 0, event.GetFlags());
+    }
+
+    void OnFindDialogClose(wxFindDialogEvent& event) {
+        if (findDialog_ != nullptr) {
+            findDialog_->Destroy();
+            findDialog_ = nullptr;
+        }
+        editor_->SetFocus();
+        event.Skip();
+    }
+
+    void FindText(bool forward, int flags = -1) {
+        const wxString needle = findData_.GetFindString();
+        if (needle.empty()) {
+            return;
+        }
+        if (flags < 0) {
+            flags = findData_.GetFlags();
+        }
+        editor_->SetSearchFlags(
+            ((flags & wxFR_MATCHCASE) ? wxSTC_FIND_MATCHCASE : 0) |
+            ((flags & wxFR_WHOLEWORD) ? wxSTC_FIND_WHOLEWORD : 0));
+
+        const int length = editor_->GetLength();
+        const int selectionStart = editor_->GetSelectionStart();
+        const int selectionEnd = editor_->GetSelectionEnd();
+        const int start = forward
+            ? (selectionStart == selectionEnd ? editor_->GetCurrentPos() : selectionEnd)
+            : (selectionStart == selectionEnd ? editor_->GetCurrentPos() : selectionStart);
+
+        const bool mustWrap = forward ? start >= length : start <= 0;
+        editor_->SetTargetRange(mustWrap ? (forward ? 0 : length) : start,
+                                forward ? length : 0);
+        int match = editor_->SearchInTarget(needle);
+        if (match == wxSTC_INVALID_POSITION && !mustWrap) {
+            editor_->SetTargetRange(forward ? 0 : length,
+                                    forward ? length : 0);
+            match = editor_->SearchInTarget(needle);
+        }
+
+        if (match == wxSTC_INVALID_POSITION) {
+            SetStatusText(_("Text not found"));
+            return;
+        }
+        editor_->SetSelection(editor_->GetTargetStart(), editor_->GetTargetEnd());
+        editor_->SetFocus();
+        SetStatusText(wxString::Format(_("Found: %s"), needle));
+    }
+
     bool SaveCurrentFile() {
         if (filePath_.empty()) {
             return SaveFileAs();
@@ -212,7 +289,18 @@ private:
         if (dialog.ShowModal() != wxID_OK) {
             return false;
         }
-        return WriteFile(dialog.GetPath());
+        wxString path = dialog.GetPath();
+        if (dialog.GetFilterIndex() == 0 && !wxFileName(path).HasExt()) {
+            path += wxS(".txt");
+            if (wxFileName::FileExists(path) &&
+                wxMessageBox(wxString::Format(_("The file %s already exists. Replace it?"),
+                                              wxFileName(path).GetFullName()),
+                             _("Confirm Overwrite"),
+                             wxYES_NO | wxNO_DEFAULT | wxICON_WARNING, this) != wxYES) {
+                return false;
+            }
+        }
+        return WriteFile(path);
     }
 
     bool WriteFile(const wxString& path) {

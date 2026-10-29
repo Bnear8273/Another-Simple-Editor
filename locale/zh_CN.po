@@ -37,6 +37,25 @@ msgstr "撤回"
 msgid "Redo"
 msgstr "重做"
 
+msgid "Find..."
+msgstr "查找..."
+
+msgid "Find Next"
+msgstr "查找下一个"
+
+msgid "Find Previous"
+msgstr "查找上一个"
+
+msgid "Find"
+msgstr "查找"
+
+msgid "Text not found"
+msgstr "未找到文本"
+
+#, c-format
+msgid "Found: %s"
+msgstr "找到：%s"
+
 msgid "Ready"
 msgstr "就绪"
 
@@ -71,6 +90,13 @@ msgstr "已读取 %s"
 
 msgid "Save As"
 msgstr "另存为"
+
+#, c-format
+msgid "The file %s already exists. Replace it?"
+msgstr "文件 %s 已存在。是否替换？"
+
+msgid "Confirm Overwrite"
+msgstr "确认覆盖"
 
 msgid "Text files (*.txt)|*.txt|All files (*.*)|*.*"
 msgstr "文本文件 (*.txt)|*.txt|所有文件 (*.*)|*.*"
