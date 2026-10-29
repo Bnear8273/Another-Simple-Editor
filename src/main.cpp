@@ -52,6 +52,8 @@ public:
              editor_->GetId());
         Bind(wxEVT_STC_SAVEPOINTREACHED, &EditorFrame::OnSavePointChanged, this,
              editor_->GetId());
+        Bind(wxEVT_STC_MODIFIED, &EditorFrame::OnEditorModified, this,
+             editor_->GetId());
         Bind(wxEVT_SYS_COLOUR_CHANGED, [this](wxSysColourChangedEvent& event) {
             ApplySystemAppearance();
             event.Skip();
@@ -65,6 +67,7 @@ private:
     wxStyledTextCtrl* editor_ = nullptr;
     wxString filePath_;
     bool loading_ = false;
+    bool previousEditWasWhitespace_ = false;
 
     void ApplySystemAppearance() {
         const wxColour background = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW);
@@ -93,6 +96,27 @@ private:
             // Read the final state after the notification has completed.
             CallAfter(&EditorFrame::UpdateTitle);
         }
+    }
+
+    void OnEditorModified(wxStyledTextEvent& event) {
+        const int type = event.GetModificationType();
+        if (type & (wxSTC_PERFORMED_UNDO | wxSTC_PERFORMED_REDO)) {
+            previousEditWasWhitespace_ = false;
+        } else if ((type & wxSTC_PERFORMED_USER) &&
+                   (type & (wxSTC_MOD_BEFOREINSERT | wxSTC_MOD_BEFOREDELETE))) {
+            const wxString text = (type & wxSTC_MOD_BEFOREDELETE)
+                ? editor_->GetTextRange(event.GetPosition(),
+                                        event.GetPosition() + event.GetLength())
+                : event.GetText();
+            const bool whitespace = text.length() == 1 && wxIsspace(text[0]);
+            if (whitespace || previousEditWasWhitespace_) {
+                // An empty undo action ends Scintilla's automatic coalescing.
+                editor_->BeginUndoAction();
+                editor_->EndUndoAction();
+            }
+            previousEditWasWhitespace_ = whitespace;
+        }
+        event.Skip();
     }
 
     void UpdateTitle() {
