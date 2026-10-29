@@ -14,7 +14,7 @@ msgid "Another Simple Editor"
 msgstr "另一个简单编辑器"
 
 msgid "Open..."
-msgstr "读取..."
+msgstr "打开..."
 
 msgid "Save"
 msgstr "保存"
