@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(SingleCodeEditor LANGUAGES CXX)
+project(AnotherSimpleEditor LANGUAGES CXX)
 
 include(GNUInstallDirs)
 include(CTest)
@@ -10,14 +10,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(wxWidgets REQUIRED COMPONENTS core base stc)
 include(${wxWidgets_USE_FILE})
 
-add_executable(singlecode-editor src/main.cpp)
-target_link_libraries(singlecode-editor PRIVATE ${wxWidgets_LIBRARIES})
+add_executable(another-simple-editor src/main.cpp)
+target_link_libraries(another-simple-editor PRIVATE ${wxWidgets_LIBRARIES})
 
 if(UNIX AND NOT APPLE AND "${wxWidgets_DEFINITIONS}" MATCHES "__WXGTK__")
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(GTK_FONT_RENDERING REQUIRED IMPORTED_TARGET
                       fontconfig gtk+-3.0 pangocairo pangoft2>=1.48)
-    target_link_libraries(singlecode-editor PRIVATE PkgConfig::GTK_FONT_RENDERING)
+    target_link_libraries(another-simple-editor PRIVATE PkgConfig::GTK_FONT_RENDERING)
     if(BUILD_TESTING)
         add_executable(pixel-font-rendering-test tests/pixel_font_rendering_test.cpp)
         target_link_libraries(pixel-font-rendering-test PRIVATE ${wxWidgets_LIBRARIES} PkgConfig::GTK_FONT_RENDERING)
@@ -36,7 +36,7 @@ if(MSGFMT_EXECUTABLE)
     foreach(translation IN LISTS TRANSLATION_FILES)
         get_filename_component(language ${translation} NAME_WE)
         set(catalog_dir "${CMAKE_CURRENT_BINARY_DIR}/locale/${language}/LC_MESSAGES")
-        set(catalog "${catalog_dir}/singlecode.mo")
+        set(catalog "${catalog_dir}/another-simple-editor.mo")
         add_custom_command(
             OUTPUT "${catalog}"
             COMMAND ${CMAKE_COMMAND} -E make_directory "${catalog_dir}"
@@ -48,10 +48,10 @@ if(MSGFMT_EXECUTABLE)
                 DESTINATION "${CMAKE_INSTALL_DATADIR}/locale/${language}/LC_MESSAGES")
     endforeach()
     if(COMPILED_TRANSLATIONS)
-        add_custom_target(singlecode-translations ALL DEPENDS ${COMPILED_TRANSLATIONS})
+        add_custom_target(another-simple-editor-translations ALL DEPENDS ${COMPILED_TRANSLATIONS})
     endif()
 else()
     message(STATUS "msgfmt not found; building without translation catalogs")
 endif()
 
-install(TARGETS singlecode-editor RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(TARGETS another-simple-editor RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})

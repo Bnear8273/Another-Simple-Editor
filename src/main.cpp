@@ -10,6 +10,10 @@
 #include <wx/fontenum.h>
 #include <wx/fontpicker.h>
 #include <wx/spinctrl.h>
+#ifdef __WXMSW__
+#include <wx/msw/wrapwin.h>
+#include <wx/fontutil.h>
+#endif
 #ifdef __WXGTK__
 #include <gtk/gtk.h>
 #include <pango/pangocairo.h>
@@ -31,7 +35,7 @@ constexpr int ID_EDITOR_SETTINGS = wxID_HIGHEST + 9;
 class EditorFrame final : public wxFrame {
 public:
     EditorFrame()
-        : wxFrame(nullptr, wxID_ANY, _("SingleCode Editor"), wxDefaultPosition,
+        : wxFrame(nullptr, wxID_ANY, _("Another Simple Editor"), wxDefaultPosition,
                   wxSize(960, 680)) {
         auto* fileMenu = new wxMenu;
         fileMenu->Append(ID_OPEN, _("Open...") + wxS("\tCtrl+O"));
@@ -221,7 +225,6 @@ private:
         case wxS('('): return wxS(')');
         case wxS('['): return wxS(']');
         case wxS('{'): return wxS('}');
-        case wxS('<'): return wxS('>');
         case wxS('\"'): return wxS('\"');
         case wxS('\''): return wxS('\'');
         default: return 0;
@@ -234,9 +237,46 @@ private:
 
     static bool IsClosingCharacter(wxChar character) {
         return character == wxS(')') || character == wxS(']') ||
-               character == wxS('}') || character == wxS('>') ||
+               character == wxS('}') ||
                character == wxS('\"') ||
                character == wxS('\'');
+    }
+
+    wxString IndentationBefore(int position) const {
+        const int line = editor_->LineFromPosition(position);
+        const int lineStart = editor_->PositionFromLine(line);
+        const wxString beforeCaret = editor_->GetTextRange(lineStart, position);
+        wxString indent;
+        while (indent.length() < beforeCaret.length()) {
+            const wxChar character = beforeCaret[indent.length()];
+            if (character != wxS(' ') && character != wxS('\t')) {
+                break;
+            }
+            indent += character;
+        }
+        return indent;
+    }
+
+    wxString LineEnding() const {
+        if (editor_->GetEOLMode() == wxSTC_EOL_CRLF) {
+            return wxS("\r\n");
+        }
+        if (editor_->GetEOLMode() == wxSTC_EOL_CR) {
+            return wxS("\r");
+        }
+        return wxS("\n");
+    }
+
+    bool InsertIndentedNewline() {
+        const wxString indent = IndentationBefore(editor_->GetSelectionStart());
+        if (indent.empty()) {
+            return false;
+        }
+        previousEditWasWhitespace_ = false;
+        editor_->BeginUndoAction();
+        editor_->ReplaceSelection(LineEnding() + indent);
+        editor_->EndUndoAction();
+        return true;
     }
 
     bool InsertBraceNewline() {
@@ -250,17 +290,7 @@ private:
             return false;
         }
 
-        const int line = editor_->LineFromPosition(position);
-        const int lineStart = editor_->PositionFromLine(line);
-        const wxString beforeCaret = editor_->GetTextRange(lineStart, position);
-        wxString baseIndent;
-        while (baseIndent.length() < beforeCaret.length()) {
-            const wxChar character = beforeCaret[baseIndent.length()];
-            if (character != wxS(' ') && character != wxS('\t')) {
-                break;
-            }
-            baseIndent += character;
-        }
+        const wxString baseIndent = IndentationBefore(position);
 
         wxString innerIndent = baseIndent;
         if (editor_->GetUseTabs()) {
@@ -272,12 +302,7 @@ private:
             innerIndent.append(static_cast<size_t>(indentWidth), wxS(' '));
         }
 
-        wxString newline = wxS("\n");
-        if (editor_->GetEOLMode() == wxSTC_EOL_CRLF) {
-            newline = wxS("\r\n");
-        } else if (editor_->GetEOLMode() == wxSTC_EOL_CR) {
-            newline = wxS("\r");
-        }
+        const wxString newline = LineEnding();
 
         const wxString insertion = newline + innerIndent + newline + baseIndent;
         previousEditWasWhitespace_ = false;
@@ -307,7 +332,8 @@ private:
 
         if (!event.ControlDown() && !event.AltDown() && !event.MetaDown() &&
             (event.GetKeyCode() == WXK_RETURN ||
-             event.GetKeyCode() == WXK_NUMPAD_ENTER) && InsertBraceNewline()) {
+             event.GetKeyCode() == WXK_NUMPAD_ENTER) &&
+            (InsertBraceNewline() || InsertIndentedNewline())) {
             return;
         }
 
@@ -452,8 +478,7 @@ private:
         const wxString name = filePath_.empty()
                                   ? _("Untitled")
                                   : wxFileName(filePath_).GetFullName();
-        SetTitle(wxString::Format(_("%s%s - SingleCode Editor"),
-                                  editor_->GetModify() ? "*" : "", name));
+        SetTitle((editor_->GetModify() ? wxS("*") : wxString()) + name);
     }
 
     bool ConfirmSaveChanges() {
@@ -573,10 +598,41 @@ private:
         grid->AddSpacer(0);
 
         auto* preview = new wxStaticText(&dialog, wxID_ANY, _("Aa Bb 0123"));
-        const auto setPreviewFont = [preview](const wxFont& font) {
+#ifdef __WXGTK__
+        PangoFontMap* previewFontMap =
+            pango_cairo_font_map_new_for_font_type(CAIRO_FONT_TYPE_FT);
+        if (previewFontMap != nullptr && PANGO_IS_FC_FONT_MAP(previewFontMap)) {
+            gtk_widget_set_font_map(GTK_WIDGET(preview->GetHandle()), previewFontMap);
+            g_object_unref(previewFontMap);
+        } else if (previewFontMap != nullptr) {
+            g_object_unref(previewFontMap);
+            previewFontMap = nullptr;
+        }
+#endif
+        const auto setPreviewFont = [preview, pixelFontRendering
+#ifdef __WXGTK__
+                                     , previewFontMap
+#endif
+        ](const wxFont& font) {
             wxFont previewFont = font;
             previewFont.SetPointSize(static_cast<int>(wxClip(
                 font.GetPointSize(), 12, 24)));
+#ifdef __WXGTK__
+            if (previewFontMap != nullptr) {
+                SetPixelFontRendering(PANGO_FC_FONT_MAP(previewFontMap),
+                                      previewFont.GetFaceName(),
+                                      pixelFontRendering->GetValue());
+                GtkWidget* widget = GTK_WIDGET(preview->GetHandle());
+                pango_context_changed(gtk_widget_get_pango_context(widget));
+                gtk_widget_queue_resize(widget);
+            }
+#elif defined(__WXMSW__)
+            if (pixelFontRendering->GetValue()) {
+                wxNativeFontInfo fontInfo = *previewFont.GetNativeFontInfo();
+                fontInfo.lf.lfQuality = NONANTIALIASED_QUALITY;
+                previewFont.SetNativeFontInfo(fontInfo);
+            }
+#endif
             preview->SetFont(previewFont);
             preview->Refresh();
         };
@@ -585,6 +641,10 @@ private:
                          [setPreviewFont](wxFontPickerEvent& event) {
                              setPreviewFont(event.GetFont());
                          });
+        pixelFontRendering->Bind(wxEVT_CHECKBOX,
+                                 [fontPicker, setPreviewFont](wxCommandEvent&) {
+                                     setPreviewFont(fontPicker->GetSelectedFont());
+                                 });
 
         outer->Add(grid, 0, wxALL | wxEXPAND, FromDIP(16));
         outer->Add(preview, 0, wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(16));
@@ -723,7 +783,7 @@ public:
         wxLocale::AddCatalogLookupPathPrefix(executableDir + wxS("/../share/locale"));
 
         locale_.Init(wxLANGUAGE_DEFAULT);
-        locale_.AddCatalog(wxS("singlecode"));
+        locale_.AddCatalog(wxS("another-simple-editor"));
 
         auto* frame = new EditorFrame;
         frame->Show();

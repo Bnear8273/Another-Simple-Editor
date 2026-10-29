@@ -1,4 +1,4 @@
-# SingleCode Editor
+# Another Simple Editor
 
 A lightweight wxWidgets text editor with open, save, and save-as support.
 
@@ -11,7 +11,7 @@ cmake -S . -B build
 cmake --build build
 ```
 
-The executable is named `singlecode-editor`. On Linux, `wx-config` can provide
+The executable is named `another-simple-editor`. On Linux, `wx-config` can provide
 the wxWidgets build configuration.
 
 ## Localization

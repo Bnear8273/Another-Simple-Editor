@@ -1,8 +1,8 @@
 msgid ""
 msgstr ""
-"Project-Id-Version: SingleCode Editor 0.1\n"
+"Project-Id-Version: Another Simple Editor 0.1\n"
 "PO-Revision-Date: 2026-10-28 00:00+0800\n"
-"Last-Translator: SingleCode contributors\n"
+"Last-Translator: Another Simple Editor contributors\n"
 "Language-Team: Chinese (Simplified)\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -10,8 +10,8 @@ msgstr ""
 "Language: zh_CN\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
-msgid "SingleCode Editor"
-msgstr "SingleCode 编辑器"
+msgid "Another Simple Editor"
+msgstr "另一个简单编辑器"
 
 msgid "Open..."
 msgstr "读取..."
@@ -89,10 +89,6 @@ msgstr "第 %d 行，第 %d 列"
 
 msgid "Untitled"
 msgstr "未命名"
-
-#, c-format
-msgid "%s%s - SingleCode Editor"
-msgstr "%s%s - SingleCode 编辑器"
 
 msgid "This document has unsaved changes. Save them first?"
 msgstr "当前文档有未保存的更改。要先保存吗？"

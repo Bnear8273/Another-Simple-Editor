@@ -8,11 +8,11 @@ To refresh the message template and a locale catalog (requires gettext tools):
 
 ```sh
 xgettext --language=C++ --keyword=_ --from-code=UTF-8 \
-  --output=locale/singlecode.pot src/main.cpp
-msgmerge --update locale/zh_CN.po locale/singlecode.pot
+  --output=locale/another-simple-editor.pot src/main.cpp
+msgmerge --update locale/zh_CN.po locale/another-simple-editor.pot
 ```
 
 Add another `<locale>.po` file beside `zh_CN.po`. CMake compiles each catalog
 with `msgfmt` when it is installed. The resulting catalog name is
-`singlecode.mo`; the application loads it using the system locale. If a catalog
+`another-simple-editor.mo`; the application loads it using the system locale. If a catalog
 is missing, the English source message is shown.
