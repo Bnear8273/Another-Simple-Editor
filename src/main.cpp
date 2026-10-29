@@ -45,8 +45,11 @@ public:
         editor_ = new wxStyledTextCtrl(this, wxID_ANY);
         ApplySystemAppearance();
 
-        CreateStatusBar();
-        SetStatusText(_("Ready"));
+        CreateStatusBar(2);
+        const int statusWidths[] = {-1, FromDIP(170)};
+        SetStatusWidths(2, statusWidths);
+        SetStatusText(_("Ready"), 0);
+        UpdateCursorPosition();
 
         Bind(wxEVT_MENU, &EditorFrame::OnOpen, this, ID_OPEN);
         Bind(wxEVT_MENU, &EditorFrame::OnSave, this, ID_SAVE);
@@ -68,6 +71,10 @@ public:
              editor_->GetId());
         Bind(wxEVT_STC_MODIFIED, &EditorFrame::OnEditorModified, this,
              editor_->GetId());
+        Bind(wxEVT_STC_UPDATEUI, [this](wxStyledTextEvent& event) {
+            UpdateCursorPosition();
+            event.Skip();
+        }, editor_->GetId());
         Bind(wxEVT_STC_ZOOM, [this](wxStyledTextEvent& event) {
             CallAfter(&EditorFrame::UpdateLineNumberWidth);
             event.Skip();
@@ -169,6 +176,12 @@ private:
             0, editor_->TextWidth(wxSTC_STYLE_LINENUMBER, sample) + FromDIP(8));
     }
 
+    void UpdateCursorPosition() {
+        SetStatusText(wxString::Format(
+            _("Line %d, Column %d"), editor_->GetCurrentLine() + 1,
+            editor_->GetColumn(editor_->GetCurrentPos()) + 1), 1);
+    }
+
     void UpdateTitle() {
         const wxString name = filePath_.empty()
                                   ? _("Untitled")
@@ -222,7 +235,7 @@ private:
         editor_->SetInsertionPoint(0);
         UpdateLineNumberWidth();
         UpdateTitle();
-        SetStatusText(wxString::Format(_("Loaded %s"), filePath_));
+        SetStatusText(wxString::Format(_("Loaded %s"), filePath_), 0);
     }
 
     void OnSave(wxCommandEvent&) { SaveCurrentFile(); }
@@ -302,12 +315,12 @@ private:
         }
 
         if (match == wxSTC_INVALID_POSITION) {
-            SetStatusText(_("Text not found"));
+            SetStatusText(_("Text not found"), 0);
             return;
         }
         editor_->SetSelection(editor_->GetTargetStart(), editor_->GetTargetEnd());
         editor_->SetFocus();
-        SetStatusText(wxString::Format(_("Found: %s"), needle));
+        SetStatusText(wxString::Format(_("Found: %s"), needle), 0);
     }
 
     bool SaveCurrentFile() {
@@ -348,7 +361,7 @@ private:
         filePath_ = path;
         editor_->SetSavePoint();
         UpdateTitle();
-        SetStatusText(wxString::Format(_("Saved %s"), filePath_));
+        SetStatusText(wxString::Format(_("Saved %s"), filePath_), 0);
         return true;
     }
 

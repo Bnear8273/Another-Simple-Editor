@@ -59,6 +59,10 @@ msgstr "找到：%s"
 msgid "Ready"
 msgstr "就绪"
 
+#, c-format
+msgid "Line %d, Column %d"
+msgstr "第 %d 行，第 %d 列"
+
 msgid "Untitled"
 msgstr "未命名"
 
