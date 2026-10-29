@@ -68,6 +68,10 @@ public:
              editor_->GetId());
         Bind(wxEVT_STC_MODIFIED, &EditorFrame::OnEditorModified, this,
              editor_->GetId());
+        Bind(wxEVT_STC_ZOOM, [this](wxStyledTextEvent& event) {
+            CallAfter(&EditorFrame::UpdateLineNumberWidth);
+            event.Skip();
+        }, editor_->GetId());
         Bind(wxEVT_SYS_COLOUR_CHANGED, [this](wxSysColourChangedEvent& event) {
             ApplySystemAppearance();
             event.Skip();
@@ -88,11 +92,21 @@ private:
     void ApplySystemAppearance() {
         const wxColour background = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW);
         const wxColour foreground = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT);
+        constexpr double gutterTint = 0.16;
+        const wxColour gutter(
+            static_cast<unsigned char>(background.Red() * (1.0 - gutterTint) +
+                                       foreground.Red() * gutterTint),
+            static_cast<unsigned char>(background.Green() * (1.0 - gutterTint) +
+                                       foreground.Green() * gutterTint),
+            static_cast<unsigned char>(background.Blue() * (1.0 - gutterTint) +
+                                       foreground.Blue() * gutterTint));
         editor_->StyleSetFont(wxSTC_STYLE_DEFAULT,
                              wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT));
         editor_->StyleSetBackground(wxSTC_STYLE_DEFAULT, background);
         editor_->StyleSetForeground(wxSTC_STYLE_DEFAULT, foreground);
         editor_->StyleClearAll();
+        editor_->StyleSetForeground(wxSTC_STYLE_LINENUMBER, foreground);
+        editor_->StyleSetBackground(wxSTC_STYLE_LINENUMBER, gutter);
         editor_->SetBackgroundColour(background);
         editor_->SetCaretForeground(foreground);
         editor_->SetSelBackground(true,
@@ -102,6 +116,9 @@ private:
         for (int margin = 0; margin < editor_->GetMarginCount(); ++margin) {
             editor_->SetMarginWidth(margin, 0);
         }
+        editor_->SetMarginType(0, wxSTC_MARGIN_NUMBER);
+        editor_->SetMarginBackground(0, gutter);
+        UpdateLineNumberWidth();
         editor_->SetMarginLeft(FromDIP(4));
         editor_->Refresh();
     }
@@ -116,6 +133,10 @@ private:
 
     void OnEditorModified(wxStyledTextEvent& event) {
         const int type = event.GetModificationType();
+        if (type & (wxSTC_PERFORMED_USER | wxSTC_PERFORMED_UNDO |
+                    wxSTC_PERFORMED_REDO)) {
+            UpdateLineNumberWidth();
+        }
         if (type & (wxSTC_PERFORMED_UNDO | wxSTC_PERFORMED_REDO)) {
             previousEditWasWhitespace_ = false;
         } else if ((type & wxSTC_PERFORMED_USER) &&
@@ -133,6 +154,19 @@ private:
             previousEditWasWhitespace_ = whitespace;
         }
         event.Skip();
+    }
+
+    void UpdateLineNumberWidth() {
+        int digits = 1;
+        for (int lines = editor_->GetLineCount(); lines >= 10; lines /= 10) {
+            ++digits;
+        }
+        wxString sample;
+        for (int i = 0; i < digits; ++i) {
+            sample += wxS('9');
+        }
+        editor_->SetMarginWidth(
+            0, editor_->TextWidth(wxSTC_STYLE_LINENUMBER, sample) + FromDIP(8));
     }
 
     void UpdateTitle() {
@@ -186,6 +220,7 @@ private:
         editor_->EmptyUndoBuffer();
         editor_->SetSavePoint();
         editor_->SetInsertionPoint(0);
+        UpdateLineNumberWidth();
         UpdateTitle();
         SetStatusText(wxString::Format(_("Loaded %s"), filePath_));
     }
