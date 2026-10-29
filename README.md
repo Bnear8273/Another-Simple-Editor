@@ -2,7 +2,7 @@
 
 A lightweight wxWidgets text editor with open, save, and save-as support.
 
-## 构建
+## Build
 
 Requires wxWidgets 3.2 or newer (including the STC component) and CMake.
 
