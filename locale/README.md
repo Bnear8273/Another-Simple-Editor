@@ -1,6 +1,6 @@
 # Translations
 
-User-facing strings in `src/main.cpp` are English source messages wrapped in
+User-facing strings in `src/*.cpp` are English source messages wrapped in
 wxWidgets' `_()` translation macro. Translation catalogs use GNU gettext PO
 files named by locale, such as `zh_CN.po` or `fr_FR.po`.
 
@@ -8,7 +8,7 @@ To refresh the message template and a locale catalog (requires gettext tools):
 
 ```sh
 xgettext --language=C++ --keyword=_ --from-code=UTF-8 \
-  --output=locale/another-simple-editor.pot src/main.cpp
+  --output=locale/another-simple-editor.pot src/*.cpp
 msgmerge --update locale/zh_CN.po locale/another-simple-editor.pot
 ```
 

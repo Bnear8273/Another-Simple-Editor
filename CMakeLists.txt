@@ -10,7 +10,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(wxWidgets REQUIRED COMPONENTS core base stc)
 include(${wxWidgets_USE_FILE})
 
-add_executable(another-simple-editor src/main.cpp)
+add_executable(another-simple-editor
+    src/main.cpp
+    src/editor_frame.cpp
+    src/editor_behavior.cpp
+    src/editor_file.cpp
+    src/editor_find.cpp
+    src/editor_settings.cpp)
 target_link_libraries(another-simple-editor PRIVATE ${wxWidgets_LIBRARIES})
 
 if(UNIX AND NOT APPLE AND "${wxWidgets_DEFINITIONS}" MATCHES "__WXGTK__")
