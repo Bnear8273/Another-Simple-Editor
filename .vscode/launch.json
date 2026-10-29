@@ -1,0 +1,15 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug SingleCode Editor (LLDB)",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build-clang/singlecode-editor",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Build (clang++)",
+      "stopOnEntry": false
+    }
+  ]
+}

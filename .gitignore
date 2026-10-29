@@ -1,2 +1,4 @@
 /build/
+/build-clang/
 /cmake-build-*/
+/compile_commands.json

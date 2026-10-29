@@ -2,12 +2,15 @@
 #include <wx/filedlg.h>
 #include <wx/filename.h>
 #include <wx/stdpaths.h>
-#include <wx/textctrl.h>
+#include <wx/stc/stc.h>
+#include <wx/settings.h>
 
 namespace {
 constexpr int ID_OPEN = wxID_HIGHEST + 1;
 constexpr int ID_SAVE = wxID_HIGHEST + 2;
 constexpr int ID_SAVE_AS = wxID_HIGHEST + 3;
+constexpr int ID_UNDO = wxID_HIGHEST + 4;
+constexpr int ID_REDO = wxID_HIGHEST + 5;
 }
 
 class EditorFrame final : public wxFrame {
@@ -20,16 +23,19 @@ public:
         fileMenu->Append(ID_SAVE, _("Save") + wxS("\tCtrl+S"));
         fileMenu->Append(ID_SAVE_AS, _("Save As...") + wxS("\tCtrl+Shift+S"));
         fileMenu->AppendSeparator();
-        fileMenu->Append(wxID_EXIT, _("Exit") + wxS("\tAlt+F4"));
+        fileMenu->Append(wxID_EXIT, _("Exit"));
 
         auto* menuBar = new wxMenuBar;
         menuBar->Append(fileMenu, _("File"));
+
+        auto* editMenu = new wxMenu;
+        editMenu->Append(ID_UNDO, _("Undo") + wxS("\tCtrl+Z"));
+        editMenu->Append(ID_REDO, _("Redo") + wxS("\tCtrl+Y"));
+        menuBar->Append(editMenu, _("Edit"));
         SetMenuBar(menuBar);
 
-        editor_ = new wxTextCtrl(
-            this, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize,
-            wxTE_MULTILINE | wxTE_RICH2 | wxTE_DONTWRAP | wxHSCROLL);
-        editor_->SetFont(wxFontInfo(12));
+        editor_ = new wxStyledTextCtrl(this, wxID_ANY);
+        ApplySystemAppearance();
 
         CreateStatusBar();
         SetStatusText(_("Ready"));
@@ -37,23 +43,55 @@ public:
         Bind(wxEVT_MENU, &EditorFrame::OnOpen, this, ID_OPEN);
         Bind(wxEVT_MENU, &EditorFrame::OnSave, this, ID_SAVE);
         Bind(wxEVT_MENU, &EditorFrame::OnSaveAs, this, ID_SAVE_AS);
+        Bind(wxEVT_MENU, &EditorFrame::OnUndo, this, ID_UNDO);
+        Bind(wxEVT_MENU, &EditorFrame::OnRedo, this, ID_REDO);
+        Bind(wxEVT_UPDATE_UI, &EditorFrame::OnUpdateUndo, this, ID_UNDO);
+        Bind(wxEVT_UPDATE_UI, &EditorFrame::OnUpdateRedo, this, ID_REDO);
         Bind(wxEVT_MENU, [this](wxCommandEvent&) { Close(); }, wxID_EXIT);
-        Bind(wxEVT_TEXT, &EditorFrame::OnTextChanged, this, editor_->GetId());
+        Bind(wxEVT_STC_SAVEPOINTLEFT, &EditorFrame::OnSavePointChanged, this,
+             editor_->GetId());
+        Bind(wxEVT_STC_SAVEPOINTREACHED, &EditorFrame::OnSavePointChanged, this,
+             editor_->GetId());
+        Bind(wxEVT_SYS_COLOUR_CHANGED, [this](wxSysColourChangedEvent& event) {
+            ApplySystemAppearance();
+            event.Skip();
+        });
         Bind(wxEVT_CLOSE_WINDOW, &EditorFrame::OnClose, this);
 
         UpdateTitle();
     }
 
 private:
-    wxTextCtrl* editor_ = nullptr;
+    wxStyledTextCtrl* editor_ = nullptr;
     wxString filePath_;
-    bool modified_ = false;
     bool loading_ = false;
 
-    void OnTextChanged(wxCommandEvent&) {
+    void ApplySystemAppearance() {
+        const wxColour background = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW);
+        const wxColour foreground = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT);
+        editor_->StyleSetFont(wxSTC_STYLE_DEFAULT,
+                             wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT));
+        editor_->StyleSetBackground(wxSTC_STYLE_DEFAULT, background);
+        editor_->StyleSetForeground(wxSTC_STYLE_DEFAULT, foreground);
+        editor_->StyleClearAll();
+        editor_->SetBackgroundColour(background);
+        editor_->SetCaretForeground(foreground);
+        editor_->SetSelBackground(true,
+            wxSystemSettings::GetColour(wxSYS_COLOUR_HIGHLIGHT));
+        editor_->SetSelForeground(true,
+            wxSystemSettings::GetColour(wxSYS_COLOUR_HIGHLIGHTTEXT));
+        for (int margin = 0; margin < editor_->GetMarginCount(); ++margin) {
+            editor_->SetMarginWidth(margin, 0);
+        }
+        editor_->SetMarginLeft(FromDIP(4));
+        editor_->Refresh();
+    }
+
+    void OnSavePointChanged(wxStyledTextEvent&) {
         if (!loading_) {
-            modified_ = true;
-            UpdateTitle();
+            // Scintilla sends save-point notifications during the transition.
+            // Read the final state after the notification has completed.
+            CallAfter(&EditorFrame::UpdateTitle);
         }
     }
 
@@ -62,11 +100,11 @@ private:
                                   ? _("Untitled")
                                   : wxFileName(filePath_).GetFullName();
         SetTitle(wxString::Format(_("%s%s - SingleCode Editor"),
-                                  modified_ ? "*" : "", name));
+                                  editor_->GetModify() ? "*" : "", name));
     }
 
     bool ConfirmSaveChanges() {
-        if (!modified_) {
+        if (!editor_->GetModify()) {
             return true;
         }
 
@@ -105,7 +143,8 @@ private:
         }
 
         filePath_ = selectedPath;
-        modified_ = false;
+        editor_->EmptyUndoBuffer();
+        editor_->SetSavePoint();
         editor_->SetInsertionPoint(0);
         UpdateTitle();
         SetStatusText(wxString::Format(_("Loaded %s"), filePath_));
@@ -114,6 +153,26 @@ private:
     void OnSave(wxCommandEvent&) { SaveCurrentFile(); }
 
     void OnSaveAs(wxCommandEvent&) { SaveFileAs(); }
+
+    void OnUndo(wxCommandEvent&) {
+        if (editor_->CanUndo()) {
+            editor_->Undo();
+        }
+    }
+
+    void OnRedo(wxCommandEvent&) {
+        if (editor_->CanRedo()) {
+            editor_->Redo();
+        }
+    }
+
+    void OnUpdateUndo(wxUpdateUIEvent& event) {
+        event.Enable(editor_->CanUndo());
+    }
+
+    void OnUpdateRedo(wxUpdateUIEvent& event) {
+        event.Enable(editor_->CanRedo());
+    }
 
     bool SaveCurrentFile() {
         if (filePath_.empty()) {
@@ -140,7 +199,7 @@ private:
         }
 
         filePath_ = path;
-        modified_ = false;
+        editor_->SetSavePoint();
         UpdateTitle();
         SetStatusText(wxString::Format(_("Saved %s"), filePath_));
         return true;
