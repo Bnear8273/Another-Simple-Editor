@@ -145,12 +145,13 @@ void EditorFrame::SetEffectiveFontSize(int pointSize) {
 
 #ifdef __WXGTK__
 void EditorFrame::ApplyPixelFontRendering() {
-    PangoFontMap* fontMap = pango_cairo_font_map_new_for_font_type(CAIRO_FONT_TYPE_FT);
+    // wxGTK draws wxStyledTextCtrl text through wxCairoContext, which creates
+    // Pango layouts using the thread's default font map, not the widget's map.
+    PangoFontMap* fontMap = pango_cairo_font_map_get_default();
     if (fontMap && PANGO_IS_FC_FONT_MAP(fontMap)) {
         SetPixelFontRendering(PANGO_FC_FONT_MAP(fontMap), pixelFontFamilies_, true);
-        gtk_widget_set_font_map(GTK_WIDGET(editor_->GetHandle()), fontMap);
+        pango_context_changed(gtk_widget_get_pango_context(GTK_WIDGET(editor_->GetHandle())));
     }
-    if (fontMap) g_object_unref(fontMap);
 }
 #endif
 
@@ -210,12 +211,8 @@ void EditorFrame::OnEditorSettings(wxCommandEvent&) {
     preview->SetText(_("Aa Bb 0123 中文"));
     for (int i = 0; i < preview->GetMarginCount(); ++i) preview->SetMarginWidth(i, 0);
 #ifdef __WXGTK__
-    PangoFontMap* previewFontMap = pango_cairo_font_map_new_for_font_type(CAIRO_FONT_TYPE_FT);
-    if (previewFontMap != nullptr && PANGO_IS_FC_FONT_MAP(previewFontMap)) {
-        gtk_widget_set_font_map(GTK_WIDGET(preview->GetHandle()), previewFontMap);
-        g_object_unref(previewFontMap);
-    } else if (previewFontMap != nullptr) {
-        g_object_unref(previewFontMap);
+    PangoFontMap* previewFontMap = pango_cairo_font_map_get_default();
+    if (previewFontMap != nullptr && !PANGO_IS_FC_FONT_MAP(previewFontMap)) {
         previewFontMap = nullptr;
     }
 #endif
@@ -337,7 +334,15 @@ void EditorFrame::OnEditorSettings(wxCommandEvent&) {
     dialog.SetSizerAndFit(outer);
     dialog.SetMinSize(wxSize(FromDIP(390), -1));
     dialog.CentreOnParent();
-    if (dialog.ShowModal() != wxID_OK) return;
+    if (dialog.ShowModal() != wxID_OK) {
+#ifdef __WXGTK__
+        // The preview uses the same Pango map as the editor. Restore the
+        // saved settings when the dialog is cancelled.
+        ApplyPixelFontRendering();
+        editor_->Refresh();
+#endif
+        return;
+    }
     fontFamilies_.Clear();
     for (unsigned int i = 0; i < list->GetCount(); ++i) fontFamilies_.Add(list->GetString(i));
     if (!fontFamilies_.empty()) editorFont_.SetFaceName(fontFamilies_[0]);
