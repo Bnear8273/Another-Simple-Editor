@@ -11,6 +11,8 @@ public:
 private:
     wxStyledTextCtrl* editor_ = nullptr;
     wxFont editorFont_;
+    wxArrayString fontFamilies_;
+    wxArrayString pixelFontFamilies_;
     int extraLineSpacing_ = 0;
     bool pixelFontRendering_ = false;
     wxString filePath_;

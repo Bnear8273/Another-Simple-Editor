@@ -18,7 +18,7 @@ static int IntermediatePixels(const std::vector<unsigned char>& pixels) {
     return count;
 }
 
-static std::vector<unsigned char> Render(PangoFontMap* fontMap) {
+static std::vector<unsigned char> Render(PangoFontMap* fontMap, const char* description = "Unifont 27", const char* sample = "Aa Bb 0123") {
     constexpr int width = 400;
     constexpr int height = 80;
     cairo_surface_t* surface = cairo_image_surface_create(CAIRO_FORMAT_RGB24, width, height);
@@ -32,9 +32,9 @@ static std::vector<unsigned char> Render(PangoFontMap* fontMap) {
 
     PangoContext* context = pango_font_map_create_context(fontMap);
     PangoLayout* layout = pango_layout_new(context);
-    PangoFontDescription* font = pango_font_description_from_string("Unifont 27");
+    PangoFontDescription* font = pango_font_description_from_string(description);
     pango_layout_set_font_description(layout, font);
-    pango_layout_set_text(layout, "Aa Bb 0123", -1);
+    pango_layout_set_text(layout, sample, -1);
     pango_cairo_update_layout(cairo, layout);
     cairo_move_to(cairo, 8, 8);
     pango_cairo_show_layout(cairo, layout);
@@ -81,6 +81,21 @@ int main() {
     const auto pixelated = Render(fontMap);
     SetPixelFontRendering(fcMap, wxString::FromUTF8("Unifont"), false);
     const auto restored = Render(fontMap);
+    wxArrayString names; names.Add("Unifont");
+    SetPixelFontRendering(fcMap, names, false);
+    const auto mixedBefore = Render(fontMap, "DejaVu Sans Mono,Unifont 27", "Aa 中文");
+    SetPixelFontRendering(fcMap, names, true);
+    const auto mixedAfter = Render(fontMap, "DejaVu Sans Mono,Unifont 27", "Aa 中文");
+    auto leftGray = [](const std::vector<unsigned char>& image) {
+        std::vector<unsigned char> left;
+        for (int y = 0; y < 80; ++y) for (int x = 0; x < 55; ++x)
+            for (int c = 0; c < 4; ++c) left.push_back(image[(y * 400 + x) * 4 + c]);
+        return IntermediatePixels(left);
+    };
+    if (leftGray(mixedBefore) != leftGray(mixedAfter) || mixedBefore == mixedAfter) {
+        std::fprintf(stderr, "Mixed fallback rendering incorrect: Latin %d -> %d, changed=%d\n", leftGray(mixedBefore), leftGray(mixedAfter), mixedBefore != mixedAfter);
+        return EXIT_FAILURE;
+    }
     g_object_unref(fontMap);
     const int originalGray = IntermediatePixels(original);
     const int pixelatedGray = IntermediatePixels(pixelated);

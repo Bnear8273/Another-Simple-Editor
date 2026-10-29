@@ -14,7 +14,7 @@ msgid "Another Simple Editor"
 msgstr "另一个简单编辑器"
 
 msgid "Open..."
-msgstr "打开..."
+msgstr "读取..."
 
 msgid "Save"
 msgstr "保存"
@@ -46,11 +46,29 @@ msgstr "字体"
 msgid "Line spacing (extra pixels)"
 msgstr "行距（额外像素）"
 
-msgid "Pixel font rendering (disable anti-aliasing)"
-msgstr "点阵字体渲染（关闭抗锯齿）"
+msgid "Disable anti-aliasing for selected font"
+msgstr "为所选字体关闭抗锯齿"
 
-msgid "Aa Bb 0123"
-msgstr "Aa Bb 0123"
+msgid "Aa Bb 0123 中文"
+msgstr "Aa Bb 0123 中文"
+
+msgid "Fonts (drag to reorder)"
+msgstr "字体（拖动排序）"
+
+msgid "Add..."
+msgstr "添加..."
+
+msgid "Change..."
+msgstr "更改..."
+
+msgid "Remove"
+msgstr "删除"
+
+msgid "Font size"
+msgstr "字号"
+
+msgid "Ordered font fallback is currently available on GTK only."
+msgstr "当前仅 GTK 支持按顺序回退字体。"
 
 msgid "Editor settings updated"
 msgstr "编辑器设置已更新"

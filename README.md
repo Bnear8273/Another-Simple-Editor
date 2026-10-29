@@ -23,3 +23,11 @@ when no translation is installed. Translation catalogs are optional; when
 `${CMAKE_INSTALL_DATADIR}/locale`.
 
 See [locale/README.md](locale/README.md) for updating and adding translations.
+
+## Platform notes
+
+- Drag-to-reorder font fallback has only been tested on Linux with GTK. Windows and macOS behavior has not been tested.
+
+## Known issues
+
+- On Wayland, after entering text with an input method, opening the Settings menu can emit `Gdk-WARNING: Tried to map a popup with a non-top most parent`. The warning occurs while GTK maps the menu; the Wayland trace shows another small popup still active at that time. Its exact relationship to the input method has not been confirmed.
