@@ -58,6 +58,9 @@ public:
         SetMenuBar(menuBar);
 
         editor_ = new wxStyledTextCtrl(this, wxID_ANY);
+        editor_->SetTabWidth(4);
+        editor_->SetIndent(4);
+        editor_->SetUseTabs(false);
         editorFont_ = wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT);
         LoadEditorSettings();
         ApplySystemAppearance();
@@ -98,6 +101,7 @@ public:
             event.Skip();
         }, editor_->GetId());
         editor_->Bind(wxEVT_KEY_DOWN, &EditorFrame::OnEditorKeyDown, this);
+        editor_->Bind(wxEVT_CHAR, &EditorFrame::OnEditorChar, this);
         editor_->Bind(wxEVT_MOUSEWHEEL, &EditorFrame::OnEditorMouseWheel, this);
         Bind(wxEVT_SYS_COLOUR_CHANGED, [this](wxSysColourChangedEvent& event) {
             ApplySystemAppearance();
@@ -212,6 +216,80 @@ private:
         editor_->SetZoom(clampedSize - editorFont_.GetPointSize());
     }
 
+    static wxChar ClosingCharacter(wxChar opening) {
+        switch (opening) {
+        case wxS('('): return wxS(')');
+        case wxS('['): return wxS(']');
+        case wxS('{'): return wxS('}');
+        case wxS('<'): return wxS('>');
+        case wxS('\"'): return wxS('\"');
+        case wxS('\''): return wxS('\'');
+        default: return 0;
+        }
+    }
+
+    static bool IsMatchingPair(wxChar opening, wxChar closing) {
+        return ClosingCharacter(opening) == closing && closing != 0;
+    }
+
+    static bool IsClosingCharacter(wxChar character) {
+        return character == wxS(')') || character == wxS(']') ||
+               character == wxS('}') || character == wxS('>') ||
+               character == wxS('\"') ||
+               character == wxS('\'');
+    }
+
+    bool InsertBraceNewline() {
+        if (editor_->GetSelectionStart() != editor_->GetSelectionEnd()) {
+            return false;
+        }
+        const int position = editor_->GetCurrentPos();
+        if (position <= 0 || position >= editor_->GetTextLength() ||
+            editor_->GetCharAt(position - 1) != wxS('{') ||
+            editor_->GetCharAt(position) != wxS('}')) {
+            return false;
+        }
+
+        const int line = editor_->LineFromPosition(position);
+        const int lineStart = editor_->PositionFromLine(line);
+        const wxString beforeCaret = editor_->GetTextRange(lineStart, position);
+        wxString baseIndent;
+        while (baseIndent.length() < beforeCaret.length()) {
+            const wxChar character = beforeCaret[baseIndent.length()];
+            if (character != wxS(' ') && character != wxS('\t')) {
+                break;
+            }
+            baseIndent += character;
+        }
+
+        wxString innerIndent = baseIndent;
+        if (editor_->GetUseTabs()) {
+            innerIndent += wxS('\t');
+        } else {
+            const int indentWidth = editor_->GetIndent() > 0
+                ? editor_->GetIndent()
+                : 4;
+            innerIndent.append(static_cast<size_t>(indentWidth), wxS(' '));
+        }
+
+        wxString newline = wxS("\n");
+        if (editor_->GetEOLMode() == wxSTC_EOL_CRLF) {
+            newline = wxS("\r\n");
+        } else if (editor_->GetEOLMode() == wxSTC_EOL_CR) {
+            newline = wxS("\r");
+        }
+
+        const wxString insertion = newline + innerIndent + newline + baseIndent;
+        previousEditWasWhitespace_ = false;
+        editor_->BeginUndoAction();
+        editor_->ReplaceSelection(insertion);
+        const int caret = position + static_cast<int>(newline.length() +
+                                                       innerIndent.length());
+        editor_->SetSelection(caret, caret);
+        editor_->EndUndoAction();
+        return true;
+    }
+
     void OnEditorKeyDown(wxKeyEvent& event) {
         if (event.ControlDown() && !event.AltDown() && !event.MetaDown()) {
             const int key = event.GetKeyCode();
@@ -226,7 +304,70 @@ private:
                 return;
             }
         }
+
+        if (!event.ControlDown() && !event.AltDown() && !event.MetaDown() &&
+            (event.GetKeyCode() == WXK_RETURN ||
+             event.GetKeyCode() == WXK_NUMPAD_ENTER) && InsertBraceNewline()) {
+            return;
+        }
+
+        if (!event.ControlDown() && !event.AltDown() && !event.MetaDown() &&
+            event.GetKeyCode() == WXK_BACK) {
+            const int selectionStart = editor_->GetSelectionStart();
+            const int selectionEnd = editor_->GetSelectionEnd();
+
+            if (selectionStart == selectionEnd && selectionStart > 0 &&
+                selectionStart < editor_->GetTextLength() &&
+                IsMatchingPair(
+                    static_cast<wxChar>(editor_->GetCharAt(selectionStart - 1)),
+                    static_cast<wxChar>(editor_->GetCharAt(selectionStart)))) {
+                previousEditWasWhitespace_ = false;
+                editor_->BeginUndoAction();
+                editor_->SetSelection(selectionStart - 1, selectionStart + 1);
+                editor_->ReplaceSelection(wxEmptyString);
+                editor_->EndUndoAction();
+                return;
+            }
+        }
         event.Skip();
+    }
+
+    void OnEditorChar(wxKeyEvent& event) {
+        if (event.ControlDown() || event.AltDown() || event.MetaDown()) {
+            event.Skip();
+            return;
+        }
+
+        const int unicodeKey = event.GetUnicodeKey();
+        const wxChar typed = static_cast<wxChar>(
+            unicodeKey == WXK_NONE ? event.GetKeyCode() : unicodeKey);
+        const int selectionStart = editor_->GetSelectionStart();
+        const int selectionEnd = editor_->GetSelectionEnd();
+
+        if (selectionStart == selectionEnd && IsClosingCharacter(typed) &&
+            editor_->GetCharAt(selectionStart) == typed) {
+            editor_->SetSelection(selectionStart + 1, selectionStart + 1);
+            return;
+        }
+
+        const wxChar closing = ClosingCharacter(typed);
+        if (closing == 0) {
+            event.Skip();
+            return;
+        }
+
+        previousEditWasWhitespace_ = false;
+        editor_->BeginUndoAction();
+        if (selectionStart != selectionEnd) {
+            editor_->InsertText(selectionEnd, wxString(closing));
+            editor_->InsertText(selectionStart, wxString(typed));
+            editor_->SetSelection(selectionStart + 1, selectionEnd + 1);
+        } else {
+            editor_->InsertText(selectionStart,
+                                wxString(typed) + wxString(closing));
+            editor_->SetSelection(selectionStart + 1, selectionStart + 1);
+        }
+        editor_->EndUndoAction();
     }
 
     void OnEditorMouseWheel(wxMouseEvent& event) {
@@ -428,15 +569,21 @@ private:
 #if !defined(__WXGTK__) && !defined(__WXMSW__)
         pixelFontRendering->Disable();
 #endif
-        outer->Add(pixelFontRendering, 0,
-                   wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(16));
+        grid->Add(pixelFontRendering, 0, wxALIGN_CENTER_VERTICAL);
+        grid->AddSpacer(0);
 
         auto* preview = new wxStaticText(&dialog, wxID_ANY, _("Aa Bb 0123"));
-        preview->SetFont(settingsFont);
+        const auto setPreviewFont = [preview](const wxFont& font) {
+            wxFont previewFont = font;
+            previewFont.SetPointSize(static_cast<int>(wxClip(
+                font.GetPointSize(), 12, 24)));
+            preview->SetFont(previewFont);
+            preview->Refresh();
+        };
+        setPreviewFont(settingsFont);
         fontPicker->Bind(wxEVT_FONTPICKER_CHANGED,
-                         [preview](wxFontPickerEvent& event) {
-                             preview->SetFont(event.GetFont());
-                             preview->Refresh();
+                         [setPreviewFont](wxFontPickerEvent& event) {
+                             setPreviewFont(event.GetFont());
                          });
 
         outer->Add(grid, 0, wxALL | wxEXPAND, FromDIP(16));
